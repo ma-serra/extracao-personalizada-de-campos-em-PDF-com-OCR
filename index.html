@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extração Personalizada de Campos em PDF com OCR</title>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <!-- Tesseract.js -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.1/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .button {
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        #pdfCanvas {
+            border: 1px solid #ddd;
+            margin-top: 20px;
+            width: 100%;
+        }
+        #extractedData {
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extração Personalizada de Campos em PDF com OCR</h1>
+    <div class="container">
+        <input type="file" id="pdfFile" accept=".pdf">
+        <button class="button" onclick="startTextExtraction()">Extrair Campos</button>
+        <canvas id="pdfCanvas"></canvas>
+        <div id="extractedData"></div>
+    </div>
+
+    <script>
+        // Lista de campos personalizados para extração
+        const customFields = ["Nome:", "Endereço:", "Data:", "CPF:", "Telefone:"];
+
+        // Função principal de extração
+        async function startTextExtraction() {
+            const pdfFile = document.getElementById("pdfFile").files[0];
+            if (!pdfFile) {
+                alert("Por favor, selecione um arquivo PDF.");
+                return;
+            }
+
+            const pdfData = await pdfFile.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+            const totalPages = pdf.numPages;
+            document.getElementById("extractedData").innerHTML = "<p>Processando o PDF...</p>";
+
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                await processPageWithOCR(page, pageNum);
+            }
+        }
+
+        // Processa cada página usando OCR
+        async function processPageWithOCR(pdfPage, pageNum) {
+            const canvas = document.getElementById('pdfCanvas');
+            const context = canvas.getContext('2d');
+            const viewport = pdfPage.getViewport({ scale: 1.5 });
+
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await pdfPage.render({ canvasContext: context, viewport: viewport }).promise;
+
+            const imageData = canvas.toDataURL('image/png');
+            extractCustomFieldsWithOCR(imageData, pageNum);
+        }
+
+        // Extrai os campos personalizados usando OCR e exibe os resultados
+        function extractCustomFieldsWithOCR(imageData, pageNum) {
+            Tesseract.recognize(
+                imageData,
+                'por', // Altere para o idioma desejado
+                { logger: (m) => console.log(`OCR progress (página ${pageNum}):`, m) }
+            ).then(({ data: { text } }) => {
+                const extractedFields = {};
+                customFields.forEach(field => {
+                    const regex = new RegExp(`${field}\\s*(.+)`, "i");
+                    const match = text.match(regex);
+                    if (match) extractedFields[field] = match[1].trim();
+                });
+                displayExtractedFields(extractedFields, pageNum);
+            });
+        }
+
+        // Exibe os campos extraídos no HTML
+        function displayExtractedFields(fields, pageNum) {
+            const extractedDataDiv = document.getElementById("extractedData");
+            const pageData = document.createElement("div");
+            pageData.innerHTML = `<strong>Página ${pageNum}:</strong>`;
+            for (const [field, value] of Object.entries(fields)) {
+                pageData.innerHTML += `<p><strong>${field}</strong> ${value}</p>`;
+            }
+            extractedDataDiv.appendChild(pageData);
+        }
+    </script>
+</body>
+</html>
